@@ -24,6 +24,7 @@ import twitter4j.conf.Configuration;
 import java.io.*;
 import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -249,7 +250,7 @@ class TwitterImpl extends TwitterBaseImpl implements Twitter {
     }
 
     @Override
-    public UploadedMedia uploadMediaChunked(String fileName, InputStream media, long size) throws TwitterException {
+    public UploadedMedia uploadMediaChunked(String fileName, InputStream media, long size) throws TwitterException, IOException {
 		UploadedMedia uploadedMedia = uploadMediaChunkedInit(size);
 		uploadMediaChunkedAppend(fileName, media, uploadedMedia.getMediaId());
 		return uploadMediaChunkedFinalize(uploadedMedia.getMediaId());
@@ -270,10 +271,16 @@ class TwitterImpl extends TwitterBaseImpl implements Twitter {
 	// "command=APPEND&media_id=601413451156586496&segment_index=0" --file
 	// /path/to/video.mp4 --file-field "media"
 
-    private void uploadMediaChunkedAppend(String fileName, InputStream media, long mediaId) throws TwitterException {
-		post(conf.getUploadBaseURL() + "media/upload.json", new HttpParameter[] {
-				new HttpParameter("command", CHUNKED_APPEND), new HttpParameter("media_id", mediaId),
-				new HttpParameter("segment_index", 0), new HttpParameter("media", fileName, media) });
+    private void uploadMediaChunkedAppend(String fileName, InputStream media, long mediaId) throws TwitterException, IOException {
+    	byte[] bytes = new byte[5 * 1024 * 1024]; // maximum of 5MB per chunk
+    	int segment_index = 0;
+    	int bytesRead;
+    	while ((bytesRead = media.read(bytes)) > 0) {
+    		ByteArrayInputStream chunk = new ByteArrayInputStream(Arrays.copyOfRange(bytes, 0, bytesRead));
+    		post(conf.getUploadBaseURL() + "media/upload.json", new HttpParameter[] {
+    				new HttpParameter("command", CHUNKED_APPEND), new HttpParameter("media_id", mediaId),
+    				new HttpParameter("segment_index", segment_index++), new HttpParameter("media", fileName, chunk) });
+    	}
 	}
 
 	// twurl -H upload.twitter.com "/1.1/media/upload.json" -d
